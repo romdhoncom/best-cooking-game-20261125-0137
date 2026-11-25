@@ -1,79 +1,67 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Dapur Kilat — screenshot scenes: deterministic setups so each screenshot
+// shows the game at its best. ?shot=cover|mid|serve|end&seed=N
+// cover: title screen over a busy kitchen with orders on the board.
+// mid:   a dish mid-assembly — the cook at the plating counter, ingredients
+//        in hand, one order half done, wok steaming.
+// serve: a finished plate at the serving window, coins popping.
+// end:   the shift-over summary screen.
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+import { makeOrder, makeRng } from './orders.js';
+import { RECIPES } from './recipes.js';
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
+export function setupShot(game, name, seed) {
+  const rng = makeRng(seed || 7);
+  game.rng = rng;
+  if (name === 'cover') {
+    game.phase = 'title';
+    const o1 = makeOrder(rng, 1);
+    const o2 = makeOrder(rng, 2, o1.recipe.id);
+    const o3 = makeOrder(rng, 3, o2.recipe.id);
+    game.orders = [o1, o2, o3];
+    game.orders[0].timeLeft = 38;
+    game.orders[1].timeLeft = 27;
+    game.orders[2].timeLeft = 18;
+    game.cook.x = 640;
+    game.cook.y = 400;
+    game.carry = ['nasi', 'telur'];
+    game.plated = null;
+    game.spawnSteam(1120 + 65, 240 + 40, 6);
+  } else if (name === 'mid') {
+    game.phase = 'play';
+    game.orders = [makeOrder(rng, 1)];
+    game.orders[0].recipe = RECIPES.miegor;
+    game.orders[0].step = 4; // about to cook
+    game.orders[0].timeLeft = 24;
+    game.cook.x = 1050;
+    game.cook.y = 330;
+    game.cook.face = 'right';
+    game.carry = ['mie', 'ayam', 'sayur'];
+    game.plated = null;
+    game.work = { station: 'wajan', label: 'Goreng di Wajan', left: 1.4, total: 3 };
+    game.spawnSteam(1120 + 65, 240 + 40, 8);
+  } else if (name === 'serve') {
+    game.phase = 'play';
+    game.orders = [makeOrder(rng, 1)];
+    game.orders[0].recipe = RECIPES.nasgor;
+    game.orders[0].step = 4;
+    game.orders[0].timeLeft = 31;
+    // Keep the order open: a 'done' order is swept off the board 1.2 s in,
+    // so the screenshot would show an empty board instead of the order.
+    game.cook.x = 1080;
+    game.cook.y = 590;
+    game.cook.face = 'right';
+    game.carry = [];
+    game.plated = 'nasgor';
+    game.lastServed = 'Nasi Goreng';
+    game.coins = 75;
+    game.score = 120;
+    game.particles.push({ kind: 'coin', text: '+25', x: 1100, y: 620, life: 3, max: 3 });
+    game.spawnSteam(1120 + 65, 240 + 40, 4);
+  } else if (name === 'end') {
+    game.phase = 'over';
+    game.summary = { served: 11, coins: 268, score: 412, bestCombo: 4, failed: 1 };
+    game.orders = [];
+    game.carry = [];
+    game.plated = null;
   }
-  return Infinity;
-}
-
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
-}
-
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
-  }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
-  }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
 }

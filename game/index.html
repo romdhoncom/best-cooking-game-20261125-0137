@@ -1,19 +1,36 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="id">
 <head>
 <meta charset="utf-8">
+<title>Dapur Kilat — Lightning Kitchen</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+<div id="wrap">
+  <header id="topbar">
+    <div id="brand">DAPUR KILAT <span>— Lightning Kitchen</span></div>
+    <div id="shift">SHIFT <b id="shift-clock">3:00</b></div>
+    <div id="score">KO IN <b id="coins">0</b> &nbsp;·&nbsp; SKOR <b id="score-num">0</b></div>
+    <div id="hearts">❤❤❤</div>
+  </header>
+  <div id="board-row">
+    <div id="order-board">
+      <div id="board-title">PAPAN PESANAN</div>
+      <div id="orders"></div>
+    </div>
+    <div id="carry">
+      <div id="carry-title">DI TANGAN</div>
+      <div id="carry-items">— kosong —</div>
+      <div id="carry-hint">WASD / panah: jalan &nbsp;·&nbsp; E / klik: pakai stasiun<br>M: suara &nbsp;·&nbsp; R: mulai lagi &nbsp;·&nbsp; P: jeda</div>
+    </div>
+  </div>
+  <canvas id="game" width="1280" height="800"></canvas>
+  <footer id="help">
+    Ambil bahan dari peti → cincang di talenan → masak di wajan → susun di piring → antar ke jendela saji sebelum waktu pesanan habis!
+    Resep ada di papan menu di dinding dapur.
+  </footer>
+</div>
+<script type="module" src="src/main.js"></script>
 </body>
 </html>
